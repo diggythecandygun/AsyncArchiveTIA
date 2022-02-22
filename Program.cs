@@ -36,7 +36,7 @@ namespace AsyncArchiveTIA
 
             List<string> projects = FindProjects();
 
-            List<Task> tasks = AsyncTaskList(projects);
+            IEnumerable<Task> tasks = AsyncTaskList(projects);
             await Task.WhenAll(tasks);
             Console.WriteLine("All projects archived, closing TIA....");         
             CloseTIA();
@@ -58,7 +58,6 @@ namespace AsyncArchiveTIA
 
             List<string> projects = new List<string>();
             Int16 count = 0;
-
 
             foreach (var tDir in targetDirectories)
             {
@@ -82,7 +81,6 @@ namespace AsyncArchiveTIA
                     {
 
                     }
-
                 }
             }
 
@@ -133,21 +131,19 @@ namespace AsyncArchiveTIA
             tia.Dispose();
         }
 
-        static List<Task> AsyncTaskList(List<string> projects)
+        static IEnumerable<Task> AsyncTaskList(List<string> projects)
         {
-            List<Task> tasks = new List<Task>();
 
             foreach (string project in projects)
             {
-                tasks.Add(ArchiveProject(project));
+                yield return ArchiveProject(project);
             }
 
-            return tasks;
         }
 
         static async Task ArchiveProject(string project)
         {
-            await Task.Delay(100);
+            await Task.Yield();
             OpenTIA();
             ProjectComposition tiaProjects = tia.Projects;
             string projectName = Path.GetFileNameWithoutExtension(project);
@@ -182,6 +178,7 @@ namespace AsyncArchiveTIA
                 Console.WriteLine($"Closing project {project}");
             }
         }
+
 
         public static Assembly OnAssemblyResolve(object sender, ResolveEventArgs args)
         {
