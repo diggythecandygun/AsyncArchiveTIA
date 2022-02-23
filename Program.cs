@@ -13,7 +13,6 @@ namespace AsyncArchiveTIA
 {
     class Program
     {
-        private static TiaPortal tia;
         private static string plc;
         private static string hmi;
 
@@ -22,7 +21,7 @@ namespace AsyncArchiveTIA
         static async Task Main(string[] args)
         {
             Console.SetWindowSize(60, 10);
-            Console.Title = "ArchivarTIA";
+            Console.Title = "AsyncArchiveTIA";
             //Subscribe to Assembly resolve event. Event fires when any assembly binding fails.
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
 
@@ -30,16 +29,18 @@ namespace AsyncArchiveTIA
             List<string> versions = RegistryReader.GetVersions();
 
             //I always have only one version installed on my VMs so i can keep this fixed, you could read the versions list to retrieve other installed versions and choose which one you want
-            int nr = 1;
-            List<string> assemblies = RegistryReader.GetAssemblies(versions[nr - 1]);
-            RegistryReader.GetAssemblyPath(versions[nr - 1], assemblies.Last(), out plc, out hmi);
+            List<string> assemblies = RegistryReader.GetAssemblies(versions[0]);
+            RegistryReader.GetAssemblyPath(versions[0], assemblies.Last(), out plc, out hmi);
 
             List<string> projects = FindProjects();
 
-            IEnumerable<Task> tasks = AsyncTaskList(projects);
-            await Task.WhenAll(tasks);
-            Console.WriteLine("All projects archived, closing TIA....");         
-            CloseTIA();
+            if (projects != null)
+            {
+                IEnumerable<Task> tasks = AsyncTaskList(projects);
+                await Task.WhenAll(tasks);
+                Console.WriteLine("All projects archived, closing TIA....");
+            }
+                    
             Thread.Sleep(3000);
         }
 
@@ -119,18 +120,6 @@ namespace AsyncArchiveTIA
             }
         }
 
-        static void OpenTIA()
-        {
-            Console.WriteLine("Loading hidden TIA instance");
-            tia = new TiaPortal(TiaPortalMode.WithoutUserInterface);
-
-        }
-
-        static void CloseTIA()
-        {
-            tia.Dispose();
-        }
-
         static IEnumerable<Task> AsyncTaskList(List<string> projects)
         {
 
@@ -144,39 +133,42 @@ namespace AsyncArchiveTIA
         static async Task ArchiveProject(string project)
         {
             await Task.Yield();
-            OpenTIA();
-            ProjectComposition tiaProjects = tia.Projects;
-            string projectName = Path.GetFileNameWithoutExtension(project);
-            DateTime moment = DateTime.Now;
-            string date = $"{moment.Year}{moment.Month}{moment.Day}_{moment.Hour}{moment.Minute}";
-            projectName = projectName + "_" + date;
-            string projectExtension = Path.GetExtension(project);
-            projectName = projectName + projectExtension.Insert(1, "z");
+            using (TiaPortal tia = new TiaPortal(TiaPortalMode.WithoutUserInterface))
+            {
+                ProjectComposition tiaProjects = tia.Projects;
+                string projectName = Path.GetFileNameWithoutExtension(project);
+                DateTime moment = DateTime.Now;
+                string date = $"{moment.Year}{moment.Month}{moment.Day}_{moment.Hour}{moment.Minute}";
+                projectName = projectName + "_" + date;
+                string projectExtension = Path.GetExtension(project);
+                projectName = projectName + projectExtension.Insert(1, "z");
 
-            Project tiaProject = null;
-            FileInfo directorio = new FileInfo(project);
-            DirectoryInfo target = new DirectoryInfo(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+                Project tiaProject = null;
+                FileInfo directorio = new FileInfo(project);
+                DirectoryInfo target = new DirectoryInfo(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+
+                try
+                {
+
+                    Console.WriteLine($"Archiving project {Path.GetFileNameWithoutExtension(project)}");
+                    tiaProject = tiaProjects.Open(directorio);
+                    tiaProject.Archive(target, $"{projectName}", ProjectArchivationMode.Compressed);
+                    Console.WriteLine($"{projectName} archived!");
+                }
+
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Error archiving project {project}");
+                    Console.WriteLine(e);
+                    Console.ReadKey();
+                }
+                finally
+                {
+                    tiaProject.Close();
+                    Console.WriteLine($"Closing project {project}");
+                }
+            }
             
-            try
-            {
-
-                Console.WriteLine($"Archiving project {Path.GetFileNameWithoutExtension(project)}");
-                tiaProject = tiaProjects.Open(directorio);
-                tiaProject.Archive(target, $"{projectName}", ProjectArchivationMode.Compressed);
-                Console.WriteLine($"{projectName} archived!");
-            }
-
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error archiving project {project}");
-                Console.WriteLine(e);
-                Console.ReadKey();
-            }
-            finally
-            {
-                tiaProject.Close();
-                Console.WriteLine($"Closing project {project}");
-            }
         }
 
 
